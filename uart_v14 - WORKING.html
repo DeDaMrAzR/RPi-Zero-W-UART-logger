@@ -1,0 +1,1441 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UART Live Viewer v14</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #151923;
+      --panel2:#10131a;
+      --txt: #e6e8ee;
+      --muted:#9aa3b2;
+      --line:#252c3a;
+      --accent:#4cc3ff;
+      --good:#29c24a;
+      --warn:#f0b429;
+      --bad:#ff4d4f;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    body { font-family: var(--sans); margin: 12px; color: var(--txt); background: var(--bg); }
+    h2 { margin: 0 0 10px 0; font-weight: 700; letter-spacing: .2px; }
+    .topbar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px;
+    }
+    .tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.07);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:#6b7280; }
+    .dot.on { background: var(--good); box-shadow: 0 0 0 4px rgba(41,194,74,.12); }
+    .dot.warn { background: var(--warn); box-shadow: 0 0 0 4px rgba(240,180,41,.12); }
+    .dot.bad { background: var(--bad); box-shadow: 0 0 0 4px rgba(255,77,79,.12); }
+
+    button {
+      padding: 7px 11px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      color: var(--txt);
+      cursor: pointer;
+    }
+    button:hover { background: rgba(255,255,255,.10); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    input, select {
+      padding: 7px 9px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      color: var(--txt);
+      outline: none;
+    }
+    input::placeholder { color: rgba(154,163,178,.7); }
+    .muted { color: var(--muted); }
+    .row { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+    .pane { flex: 1; min-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    .panehead {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 10px 10px 8px 10px; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0));
+      border-bottom: 1px solid var(--line);
+    }
+    .panehead h3 { margin: 0; font-size: 16px; display:flex; align-items:center; gap:8px; }
+    .pill {
+      font-size: 12px; padding: 2px 8px; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.10); color: var(--muted);
+      background: rgba(255,255,255,.04);
+    }
+    .controls { display:flex; gap: 8px; flex-wrap: wrap; align-items:center; }
+    .controls .group { display:flex; gap: 8px; flex-wrap: wrap; align-items:center; padding: 6px; border: 1px dashed rgba(255,255,255,.10); border-radius: 12px; background: rgba(0,0,0,.15); }
+    .controls label { font-size: 12px; color: var(--muted); display:flex; align-items:center; gap:6px; }
+    .logwrap { padding: 10px; }
+    .log {
+      font-family: var(--mono);
+      background: var(--panel2);
+      border: 1px solid rgba(255,255,255,.08);
+      color: #d9dde8;
+      padding: 10px;
+      height: 62vh;
+      overflow: auto;
+      border-radius: 12px;
+      margin: 0;
+      white-space: pre;
+      tab-size: 2;
+    }
+    .footer { padding: 10px; border-top: 1px solid var(--line); display:flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .export { display:flex; gap: 8px; flex-wrap: wrap; }
+    .kpi { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
+    .kpi span { font-size: 12px; color: var(--muted); }
+    .tip {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .small { font-size: 12px; }
+    .danger { border-color: rgba(255,77,79,.35); }
+    .right { margin-left: auto; }
+    .hotkey { font-family: var(--mono); font-size: 11px; padding: 2px 6px; border-radius: 8px; border:1px solid rgba(255,255,255,.12); color: rgba(230,232,238,.85); background: rgba(255,255,255,.05); }
+  
+    /* highlights */
+    .hl { padding: 0 1px; border-radius: 3px; }
+    .hl-red { background: rgba(255,77,79,.25); }
+    .hl-green { background: rgba(82,196,26,.22); }
+    .hl-blue { background: rgba(24,144,255,.22); }
+    .hl-yellow { background: rgba(250,219,20,.22); }
+    .hl-magenta { background: rgba(235,47,150,.22); }
+    .hl-cyan { background: rgba(19,194,194,.20); }
+    .hl-gray { background: rgba(140,140,140,.22); }
+    .rulelabel { color: rgba(230,232,238,.65); font-size: 11px; margin-left: 8px; }
+
+
+    /* --- v14: dark-themed select/option dropdowns --- */
+    select {
+      background-color: var(--panel2);
+      color: var(--txt);
+      border: 1px solid var(--line);
+      font-family: inherit;
+    }
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    option {
+      background-color: var(--panel2);
+      color: var(--txt);
+    }
+    /* Selected option (Chrome / Edge) */
+    option:checked {
+      background-color: var(--panel);
+      color: var(--txt);
+    }
+
+</style>
+</head>
+<body>
+  <h2>UART Live Viewer (RX+TX) <span class="muted small">v14</span></h2>
+
+  <div class="topbar">
+    <span class="tag"><span class="dot" id="dot"></span><span id="status">idle</span></span>
+
+    <span class="tag">WebSocket</span>
+    <span class="tag">Pi IP</span>
+    <input id="wsip" style="width: 210px;" placeholder="192.168.0.65" value="" />
+    <span class="muted small">:8765</span>
+
+    <span class="tag">Labels</span>
+    <label class="small muted">Port A =</label>
+    <select id="labelASelect">
+      <option value="RX" selected>RX</option>
+      <option value="TX">TX</option>
+    </select>
+    <span class="muted small">Port B = <b id="labelBInline">TX</b></span>
+    <button id="swapLabels" title="Swap RX/TX">Swap</button>
+<button id="connect">Connect</button>
+    <button id="disconnect" disabled>Disconnect</button>
+
+    <span class="tag">Global</span>
+    <button id="pauseAll" disabled>Pause</button>
+    <button id="resumeAll" disabled>Resume</button>
+    <button id="clearAll" class="danger">Clear</button>
+    <button id="markAll">Mark</button>
+
+    <span class="tag">Baud</span>
+    <select id="baud" disabled>
+      <option value="300">300</option>
+      <option value="1200">1200</option>
+      <option value="2400">2400</option>
+      <option value="4800">4800</option>
+      <option value="9600">9600</option>
+      <option value="19200">19200</option>
+      <option value="38400">38400</option>
+      <option value="57600">57600</option>
+      <option value="115200" selected>115200</option>
+      <option value="230400">230400</option>
+      <option value="460800">460800</option>
+      <option value="921600">921600</option>
+      <option value="1500000">1500000</option>
+      <option value="2000000">2000000</option>
+    </select>
+    <button id="applyBaud" disabled>Apply</button>
+
+    <span class="tag">Max log</span>
+    <input id="maxEntries" style="width: 110px;" type="number" min="100" step="100" value="5000" />
+    <span class="tag">Session</span>
+    <label class="small muted"><input id="remember" type="checkbox" checked /> Remember</label>
+    <span class="tag">Timestamps</span>
+    <select id="tsMode">
+      <option value="off">Off</option>
+      <option value="iso" selected>ISO</option>
+      <option value="local">Local</option>
+    </select>
+
+    <span class="tag">View</span>
+    <select id="viewMode">
+      <option value="ascii" selected>ASCII</option>
+      <option value="hex">HEX</option>
+      <option value="both">ASCII + HEX</option>
+      <option value="utf8">UTF-8</option>
+    </select>
+
+    <span class="tag">No-data</span>
+    <input id="nodataMs" style="width: 120px;" type="number" min="200" step="100" value="1500" />
+    <span class="muted small">ms</span>
+
+    <span class="right muted small">Hotkeys: <span class="hotkey">Ctrl</span>+<span class="hotkey">K</span> clear • <span class="hotkey">M</span> mark • <span class="hotkey">Space</span> pause/resume</span>
+  </div>
+
+  <div class="row">
+    <!-- Pane A -->
+    <div class="pane" id="paneA">
+      <div class="panehead">
+        <h3>UART <span id="labelA">RX</span> <span class="pill">TCP 2000</span> <span class="pill" id="stateA">idle</span></h3>
+        <div class="controls">
+          <div class="group">
+            <label><input id="autoA" type="checkbox" checked /> Auto-scroll</label>
+            <label><input id="pauseA" type="checkbox" /> Pause</label>
+            <label><input id="showMetaA" type="checkbox" checked /> Show meta</label>
+          </div>
+          <div class="group">
+            <label>Filter <input id="filterA" placeholder="search / filter…" style="width: 220px" /></label>
+          </div>
+          <div class="group">
+            <label>Framing 
+              <select id="frameModeA">
+                <option value="raw" selected>Raw</option>
+                <option value="lf">LF (\n)</option>
+                <option value="crlf">CRLF</option>
+                <option value="fixed">Fixed</option>
+                <option value="idle">Idle gap</option>
+              </select>
+            </label>
+            <input id="frameParamA" class="small" style="width: 90px;" type="number" min="1" step="1" value="16" title="Fixed: bytes / Idle: ms" />
+            <span class="muted small" id="frameHintA">bytes</span>
+            <button id="rulesBtnA" title="Edit highlight rules">Rules</button>
+          </div>
+        </div>
+      </div>
+      <div class="logwrap">
+        <pre class="log" id="outA"></pre>
+      </div>
+      <div class="footer">
+        <div class="export">
+          <button id="a_txt">Export TXT</button>
+          <button id="a_jsonl">Export JSONL</button>
+          <button id="a_csv">Export CSV</button>
+        </div>
+        <div class="kpi">
+          <span id="kpiA">0 lines</span>
+          <span id="lastA">no data</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pane B -->
+    <div class="pane" id="paneB">
+      <div class="panehead">
+        <h3>UART <span id="labelB">TX</span> <span class="pill">TCP 2001</span> <span class="pill" id="stateB">idle</span></h3>
+        <div class="controls">
+          <div class="group">
+            <label><input id="autoB" type="checkbox" checked /> Auto-scroll</label>
+            <label><input id="pauseB" type="checkbox" /> Pause</label>
+            <label><input id="showMetaB" type="checkbox" checked /> Show meta</label>
+          </div>
+          <div class="group">
+            <label>Filter <input id="filterB" placeholder="search / filter…" style="width: 220px" /></label>
+          </div>
+          <div class="group">
+            <label>Framing 
+              <select id="frameModeB">
+                <option value="raw" selected>Raw</option>
+                <option value="lf">LF (\n)</option>
+                <option value="crlf">CRLF</option>
+                <option value="fixed">Fixed</option>
+                <option value="idle">Idle gap</option>
+              </select>
+            </label>
+            <input id="frameParamB" class="small" style="width: 90px;" type="number" min="1" step="1" value="16" title="Fixed: bytes / Idle: ms" />
+            <span class="muted small" id="frameHintB">bytes</span>
+            <button id="rulesBtnB" title="Edit highlight rules">Rules</button>
+          </div>
+        </div>
+      </div>
+      <div class="logwrap">
+        <pre class="log" id="outB"></pre>
+      </div>
+      <div class="footer">
+        <div class="export">
+          <button id="b_txt">Export TXT</button>
+          <button id="b_jsonl">Export JSONL</button>
+          <button id="b_csv">Export CSV</button>
+        </div>
+        <div class="kpi">
+          <span id="kpiB">0 lines</span>
+          <span id="lastB">no data</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  
+  <!-- Rules modal -->
+  <div id="rulesModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999;">
+    <div style="max-width:900px; margin:40px auto; background:var(--panel); border:1px solid var(--border); border-radius:14px; box-shadow:0 18px 55px rgba(0,0,0,.45); overflow:hidden;">
+      <div style="display:flex; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid var(--border);">
+        <div style="font-weight:700;">Highlight rules</div>
+        <div class="muted small" id="rulesWhich">Port</div>
+        <div class="right"></div>
+        <button id="rulesClose">Close</button>
+      </div>
+      <div style="padding:14px;">
+        <div class="muted small" style="margin-bottom:10px;">
+          One rule per line: <code>LABEL | HEX_PATTERN | COLOR</code> &nbsp; (COLOR: red, green, blue, yellow, magenta, cyan, gray).<br/>
+          HEX_PATTERN example: <code>55 AA ?? ??</code> (?? = wildcard byte). Empty/invalid lines are ignored.
+        </div>
+        <textarea id="rulesText" style="width:100%; min-height:240px; background:rgba(0,0,0,.22); color:var(--fg); border:1px solid var(--border); border-radius:12px; padding:10px; font-family:var(--mono); font-size:12px; outline:none;"></textarea>
+        <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+          <label class="small muted"><input id="rulesEnable" type="checkbox" checked/> Enable rules</label>
+          <label class="small muted"><input id="rulesShowLabel" type="checkbox"/> Show labels</label>
+          <div class="right"></div>
+          <button id="rulesApply">Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<div class="tip">
+    Open this file locally on Windows (<code>file://</code>). Baud changes are sent to HTTP port <code>8766</code> using a no-CORS “image ping”, so it works from <code>file://</code>.
+  </div>
+
+<script>
+/* ----------------------------
+   Helpers: bytes/decoding
+---------------------------- */
+function nowISO() { return new Date().toISOString(); }
+function nowLocal() { return new Date().toLocaleString(); }
+
+function hexToBytes(hex) {
+  const clean = (hex || "").replaceAll(/\s+/g, "");
+  const out = new Uint8Array(Math.floor(clean.length / 2));
+  for (let i = 0, j = 0; i < clean.length - 1; i += 2, j++) {
+    out[j] = parseInt(clean.slice(i, i + 2), 16);
+  }
+  return out;
+}
+
+function bytesToPrintableAscii(bytes) {
+  let out = "";
+  for (const b of bytes) out += (b >= 32 && b <= 126) ? String.fromCharCode(b) : ".";
+  return out;
+}
+
+function bytesToAscii(bytes) { return bytesToPrintableAscii(bytes); }
+
+function bytesToUtf8(bytes) {
+  try { return new TextDecoder("utf-8", { fatal: false }).decode(bytes); }
+  catch { return bytesToPrintableAscii(bytes); }
+}
+
+function bytesToHex(bytes) {
+  let out = "";
+  for (let i = 0; i < bytes.length; i++) {
+    out += bytes[i].toString(16).padStart(2, "0");
+    if (i !== bytes.length - 1) out += " ";
+  }
+  return out;
+}
+
+function fmtTimestamp(tsMode) {
+  if (tsMode === "off") return "";
+  if (tsMode === "local") return nowLocal() + " ";
+  return nowISO() + " ";
+}
+
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvEscape(s) {
+  const str = String(s ?? "");
+  if (str.includes('"') || str.includes(",") || str.includes("\n") || str.includes("\r")) {
+    return `"${str.replaceAll('"', '""')}"`;
+  }
+  return str;
+}
+
+function makeCSV(rows) {
+  const header = ["timestamp", "uart", "kind", "len", "text", "hex"].join(",");
+  const lines = rows.map(r => [
+    csvEscape(r.ts),
+    csvEscape(r.uart),
+    csvEscape(r.kind),
+    csvEscape(r.len),
+    csvEscape(r.text),
+    csvEscape(r.hex)
+  ].join(","));
+  return header + "\n" + lines.join("\n") + "\n";
+}
+
+function ipToHttpBase(ip) {
+  // 192.168.0.53 -> http://192.168.0.53:8766
+  const clean = String(ip || "").trim();
+  return `http://${clean}:8766`;
+}
+
+function getPiIP() {
+  const ip = document.getElementById("wsip").value.trim();
+  // very light validation; we keep it permissive for hostnames too
+  if (!ip) throw new Error("Pi IP is empty");
+  return ip;
+}
+
+function getWsUrl() {
+  const ip = getPiIP();
+  return `ws://${ip}:8765`;
+}
+
+// ---- File:// friendly "no CORS" request ----
+function httpPing(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(true); // we don't care about response body; request is what matters
+    img.src = url + (url.includes("?") ? "&" : "?") + "ts=" + Date.now();
+  });
+}
+
+
+/* ----------------------------
+   Session persistence
+---------------------------- */
+const SETTINGS_KEY = "uart_live_viewer_settings";
+
+function readSettingsFromUI() {
+  return {
+    ip: (document.getElementById("wsip").value || "").trim(),
+    labelA: document.getElementById("labelASelect").value,
+    baud: document.getElementById("baud").value,
+    tsMode: document.getElementById("tsMode").value,
+    viewMode: document.getElementById("viewMode").value,
+    maxEntries: document.getElementById("maxEntries").value,
+    nodataMs: document.getElementById("nodataMs").value,
+    // per pane
+    panes: {
+      A: {
+        auto: document.getElementById("autoA").checked,
+        pause: document.getElementById("pauseA").checked,
+        showMeta: document.getElementById("showMetaA").checked,
+        filter: document.getElementById("filterA").value || "",
+        frameMode: document.getElementById("frameModeA").value,
+        frameParam: document.getElementById("frameParamA").value,
+        rulesText: state.A.rulesText || "",
+        rulesEnabled: state.A.rulesEnabled,
+        rulesShowLabel: state.A.rulesShowLabel
+      },
+      B: {
+        auto: document.getElementById("autoB").checked,
+        pause: document.getElementById("pauseB").checked,
+        showMeta: document.getElementById("showMetaB").checked,
+        filter: document.getElementById("filterB").value || "",
+        frameMode: document.getElementById("frameModeB").value,
+        frameParam: document.getElementById("frameParamB").value,
+        rulesText: state.B.rulesText || "",
+        rulesEnabled: state.B.rulesEnabled,
+        rulesShowLabel: state.B.rulesShowLabel
+      }
+    }
+  };
+}
+
+function applySettingsToUI(s) {
+  if (!s) return;
+  if (typeof s.ip === "string") document.getElementById("wsip").value = s.ip;
+  if (s.labelA) setLabelA(s.labelA);
+  if (s.baud) document.getElementById("baud").value = String(s.baud);
+  if (s.tsMode) document.getElementById("tsMode").value = s.tsMode;
+  if (s.viewMode) document.getElementById("viewMode").value = s.viewMode;
+  if (s.maxEntries) document.getElementById("maxEntries").value = String(s.maxEntries);
+  if (s.nodataMs) document.getElementById("nodataMs").value = String(s.nodataMs);
+
+  const pA = s.panes?.A;
+  const pB = s.panes?.B;
+  if (pA) {
+    document.getElementById("autoA").checked = !!pA.auto;
+    document.getElementById("pauseA").checked = !!pA.pause;
+    document.getElementById("showMetaA").checked = !!pA.showMeta;
+    document.getElementById("filterA").value = pA.filter || "";
+    document.getElementById("frameModeA").value = pA.frameMode || "raw";
+    document.getElementById("frameParamA").value = pA.frameParam || 16;
+    state.A.rulesText = pA.rulesText || "";
+    state.A.rulesEnabled = pA.rulesEnabled !== false;
+    state.A.rulesShowLabel = !!pA.rulesShowLabel;
+  }
+  if (pB) {
+    document.getElementById("autoB").checked = !!pB.auto;
+    document.getElementById("pauseB").checked = !!pB.pause;
+    document.getElementById("showMetaB").checked = !!pB.showMeta;
+    document.getElementById("filterB").value = pB.filter || "";
+    document.getElementById("frameModeB").value = pB.frameMode || "raw";
+    document.getElementById("frameParamB").value = pB.frameParam || 16;
+    state.B.rulesText = pB.rulesText || "";
+    state.B.rulesEnabled = pB.rulesEnabled !== false;
+    state.B.rulesShowLabel = !!pB.rulesShowLabel;
+  }
+
+  syncPaneConfigFromUI("A");
+  syncPaneConfigFromUI("B");
+  state.A.rules = parseRulesText(state.A.rulesText);
+  state.B.rules = parseRulesText(state.B.rulesText);
+
+  rerenderPort("A");
+  rerenderPort("B");
+}
+
+function saveSettings() {
+  const remember = document.getElementById("remember")?.checked;
+  if (!remember) return;
+  try {
+    const s = readSettingsFromUI();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch {}
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    applySettingsToUI(s);
+  } catch {}
+}
+
+/* ----------------------------
+   App state
+---------------------------- */
+let ws = null;
+let connected = false;
+
+let userDisconnected = false;
+let reconnectTimer = null;
+let reconnectBackoffMs = 500;
+const reconnectMaxBackoffMs = 8000;
+
+function clearReconnectTimer() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+}
+
+function scheduleReconnect(reason) {
+  if (userDisconnected) return;
+  if (reconnectTimer) return;
+  // exponential backoff with cap
+  const wait = Math.min(reconnectBackoffMs, reconnectMaxBackoffMs);
+  reconnectBackoffMs = Math.min(Math.round(reconnectBackoffMs * 1.6), reconnectMaxBackoffMs);
+
+  setDot("warn");
+  setConnectedUI(false);
+  setStatus(reason ? `reconnecting… (${reason})` : "reconnecting…");
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if (!ws && !userDisconnected) connectWS();
+  }, wait);
+}
+
+
+let lastKnownBaud = null;
+let baudApplying = false;
+
+// Labels: incoming ports are always "A" and "B" from ws_bridge.
+// We let you *display* them as RX/TX and swap as needed.
+let labelMap = { A: "RX", B: "TX" };
+
+function updateLabelUI() {
+  const a = labelMap.A;
+  const b = labelMap.B;
+  const hA = document.getElementById("labelA");
+  const hB = document.getElementById("labelB");
+  const inlineB = document.getElementById("labelBInline");
+  const selA = document.getElementById("labelASelect");
+  if (hA) hA.textContent = a;
+  if (hB) hB.textContent = b;
+  if (inlineB) inlineB.textContent = b;
+  if (selA && selA.value !== a) selA.value = a;
+  // filenames & rendered lines depend on labels
+  rerenderPort("A"); rerenderPort("B");
+}
+
+function setLabelA(aLabel) {
+  const a = (aLabel === "TX") ? "TX" : "RX";
+  labelMap.A = a;
+  labelMap.B = (a === "RX") ? "TX" : "RX";
+  updateLabelUI();
+}
+
+function swapLabels() {
+  const tmp = labelMap.A;
+  labelMap.A = labelMap.B;
+  labelMap.B = tmp;
+  updateLabelUI();
+}
+
+function dispUart(u) {
+  return (u === "A" || u === "B") ? labelMap[u] : String(u ?? "");
+}
+
+const state = {
+  A: {
+    entries: [],
+    lastRx: 0,
+    lastAny: 0,
+    paused: false,
+    // framing
+    frameMode: "raw",
+    frameParam: 16,
+    _buf: [],
+    _idleTimer: null,
+    _lastByteAt: 0,
+    // rules
+    rulesEnabled: true,
+    rulesShowLabel: false,
+    rulesText: "",
+    rules: []
+  },
+  B: {
+    entries: [],
+    lastRx: 0,
+    lastAny: 0,
+    paused: false,
+    frameMode: "raw",
+    frameParam: 16,
+    _buf: [],
+    _idleTimer: null,
+    _lastByteAt: 0,
+    rulesEnabled: true,
+    rulesShowLabel: false,
+    rulesText: "",
+    rules: []
+  }
+};
+
+// entry schema:
+// {ts, uart, kind:"data"|"meta"|"mark", bytes:Uint8Array|null, hex:string|null, text:string, len:number, rawJson:string, renderedLine:string}
+
+function getMaxEntries() {
+  const v = parseInt(document.getElementById("maxEntries").value, 10);
+  return Number.isFinite(v) && v > 0 ? v : 5000;
+}
+
+function ringPush(port, entry) {
+  const max = getMaxEntries();
+  const arr = state[port].entries;
+  arr.push(entry);
+  if (arr.length > max) arr.splice(0, arr.length - max);
+}
+
+function setDot(mode) {
+  const el = document.getElementById("dot");
+  el.classList.remove("on","warn","bad");
+  if (mode === "on") el.classList.add("on");
+  else if (mode === "warn") el.classList.add("warn");
+  else if (mode === "bad") el.classList.add("bad");
+}
+
+function setStatus(text) {
+  document.getElementById("status").textContent = text;
+}
+
+function setPaneState(port, text) {
+  document.getElementById(port === "A" ? "stateA" : "stateB").textContent = text;
+}
+
+function updateKPI(port) {
+  const kpi = document.getElementById(port === "A" ? "kpiA" : "kpiB");
+  const last = document.getElementById(port === "A" ? "lastA" : "lastB");
+  kpi.textContent = `${state[port].entries.length} lines`;
+  if (!state[port].lastAny) last.textContent = "no data";
+  else last.textContent = `last: ${new Date(state[port].lastAny).toLocaleTimeString()}`;
+}
+
+function getPaneEls(port) {
+  return {
+    out: document.getElementById(port === "A" ? "outA" : "outB"),
+    filter: document.getElementById(port === "A" ? "filterA" : "filterB"),
+    auto: document.getElementById(port === "A" ? "autoA" : "autoB"),
+    pause: document.getElementById(port === "A" ? "pauseA" : "pauseB"),
+    showMeta: document.getElementById(port === "A" ? "showMetaA" : "showMetaB")
+  };
+}
+
+
+function syncPaneConfigFromUI(port) {
+  const modeEl = document.getElementById("frameMode" + port);
+  const paramEl = document.getElementById("frameParam" + port);
+  const hintEl = document.getElementById("frameHint" + port);
+  if (!modeEl || !paramEl || !hintEl) return;
+
+  const mode = modeEl.value || "raw";
+  let param = parseInt(paramEl.value, 10);
+  if (!Number.isFinite(param) || param <= 0) param = (mode === "idle") ? 10 : 16;
+
+  // update UI hint + min/step
+  if (mode === "fixed") {
+    hintEl.textContent = "bytes";
+    paramEl.min = "1";
+    paramEl.step = "1";
+  } else if (mode === "idle") {
+    hintEl.textContent = "ms";
+    paramEl.min = "1";
+    paramEl.step = "1";
+  } else {
+    hintEl.textContent = "";
+  }
+  // Disable param for modes that don't need it
+  paramEl.disabled = !(mode === "fixed" || mode === "idle");
+
+  // Apply to state + flush any partial buffer on mode changes
+  const st = state[port];
+  if (st.frameMode !== mode || st.frameParam !== param) {
+    flushBuffered(port, true);
+  }
+  st.frameMode = mode;
+  st.frameParam = param;
+
+  // idle timer cleanup
+  if (st._idleTimer) {
+    clearTimeout(st._idleTimer);
+    st._idleTimer = null;
+  }
+}
+
+function flushBuffered(port, force) {
+  const st = state[port];
+  if (!st) return;
+  if (st._idleTimer) { clearTimeout(st._idleTimer); st._idleTimer = null; }
+  if (st._buf && st._buf.length) {
+    const bytes = new Uint8Array(st._buf);
+    st._buf = [];
+    pushFrame(port, bytes, force ? "flush" : "idle");
+  }
+}
+
+function pushFrame(port, bytes, reason) {
+  if (!bytes || !bytes.length) return;
+  const entry = {
+    ts: nowISO(),
+    uart: port,
+    kind: "data",
+    bytes,
+    hex: bytesToHex(bytes),
+    text: bytesToAscii(bytes),
+    len: bytes.length,
+    rawJson: JSON.stringify({ uart: port, len: bytes.length, reason })
+  };
+  ringPush(port, entry);
+  if (!state[port].paused) appendIfSimple(port, entry);
+  updateKPI(port);
+}
+
+function ingestBytes(port, bytes) {
+  const st = state[port];
+  if (!st || !bytes) return;
+
+  const mode = st.frameMode || "raw";
+
+  if (mode === "raw") {
+    return pushFrame(port, bytes, "raw");
+  }
+
+  // Append to buffer and split/flush as needed
+  const now = Date.now();
+  st._lastByteAt = now;
+
+  if (mode === "idle") {
+    // boundary determined by silence gap; flush after param ms without new bytes
+    if (st._idleTimer) clearTimeout(st._idleTimer);
+    st._idleTimer = setTimeout(() => {
+      st._idleTimer = null;
+      flushBuffered(port, false);
+    }, st.frameParam);
+    for (const b of bytes) st._buf.push(b);
+    return;
+  }
+
+  for (const b of bytes) st._buf.push(b);
+
+  if (mode === "fixed") {
+    const n = st.frameParam;
+    while (st._buf.length >= n) {
+      const chunk = st._buf.slice(0, n);
+      st._buf = st._buf.slice(n);
+      pushFrame(port, new Uint8Array(chunk), "fixed");
+    }
+    return;
+  }
+
+  if (mode === "lf") {
+    // split by LF, drop LF (and optional CR before it)
+    while (true) {
+      const idx = st._buf.indexOf(0x0A);
+      if (idx < 0) break;
+      let frame = st._buf.slice(0, idx);
+      // drop optional CR
+      if (frame.length && frame[frame.length - 1] === 0x0D) frame = frame.slice(0, -1);
+      st._buf = st._buf.slice(idx + 1);
+      pushFrame(port, new Uint8Array(frame), "lf");
+    }
+    return;
+  }
+
+  if (mode === "crlf") {
+    while (true) {
+      let idx = -1;
+      for (let i = 0; i < st._buf.length - 1; i++) {
+        if (st._buf[i] === 0x0D && st._buf[i + 1] === 0x0A) { idx = i; break; }
+      }
+      if (idx < 0) break;
+      const frame = st._buf.slice(0, idx);
+      st._buf = st._buf.slice(idx + 2);
+      pushFrame(port, new Uint8Array(frame), "crlf");
+    }
+    return;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function parseRulesText(text) {
+  const rules = [];
+  const lines = String(text || "").split(/\r?\n/);
+  for (const line of lines) {
+    const raw = line.trim();
+    if (!raw || raw.startsWith("#")) continue;
+    const parts = raw.split("|").map(s => s.trim());
+    if (parts.length < 2) continue;
+    const label = parts[0] || "";
+    const pat = parts[1] || "";
+    const color = (parts[2] || "yellow").toLowerCase();
+    const colorOk = ["red","green","blue","yellow","magenta","cyan","gray"].includes(color) ? color : "yellow";
+    const toks = pat.split(/\s+/).filter(Boolean);
+    if (!toks.length) continue;
+    const bytes = [];
+    let ok = true;
+    for (const t of toks) {
+      if (t === "??" || t === "**") bytes.push(null);
+      else {
+        const v = parseInt(t, 16);
+        if (!Number.isFinite(v) || v < 0 || v > 255) { ok = false; break; }
+        bytes.push(v);
+      }
+    }
+    if (!ok || !bytes.length) continue;
+    rules.push({ label, pattern: bytes, color: colorOk, cls: "hl-" + colorOk });
+  }
+  return rules;
+}
+
+function buildHighlightMask(bytes, rules) {
+  if (!rules || !rules.length || !bytes || !bytes.length) return { mask: null, labels: [] };
+  const mask = new Array(bytes.length).fill(null);
+  const labels = [];
+  for (const rule of rules) {
+    const p = rule.pattern;
+    if (!p || !p.length || p.length > bytes.length) continue;
+    for (let i = 0; i <= bytes.length - p.length; i++) {
+      let match = true;
+      for (let j = 0; j < p.length; j++) {
+        const want = p[j];
+        if (want === null) continue;
+        if (bytes[i + j] !== want) { match = false; break; }
+      }
+      if (match) {
+        if (rule.label) labels.push(rule.label);
+        for (let j = 0; j < p.length; j++) {
+          if (mask[i + j] == null) mask[i + j] = rule.cls;
+        }
+        i += p.length - 1;
+      }
+    }
+  }
+  return { mask, labels: [...new Set(labels)] };
+}
+
+function renderBytesHexHTML(bytes, mask) {
+  const out = [];
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i].toString(16).padStart(2, "0");
+    if (mask && mask[i]) out.push(`<span class="hl ${mask[i]}">${b}</span>`);
+    else out.push(b);
+  }
+  return out.join(" ");
+}
+
+function renderBytesAsciiHTML(bytes, mask) {
+  const out = [];
+  for (let i = 0; i < bytes.length; i++) {
+    const ch = (bytes[i] >= 32 && bytes[i] <= 126) ? String.fromCharCode(bytes[i]) : ".";
+    const safe = escapeHtml(ch);
+    if (mask && mask[i]) out.push(`<span class="hl ${mask[i]}">${safe}</span>`);
+    else out.push(safe);
+  }
+  return out.join("");
+}
+
+function renderLinePlain(entry) {
+  const tsMode = document.getElementById("tsMode").value;
+  const viewMode = document.getElementById("viewMode").value;
+
+  const ts = (entry.kind === "mark") ? fmtTimestamp(tsMode) : (entry.ts ? (tsMode === "off" ? "" : entry.ts + " ") : "");
+  if (entry.kind === "mark") return `${ts}---- MARK ----`;
+  if (entry.kind === "meta") return `${ts}[meta] ${entry.text}`;
+  if (!entry.bytes) return `${ts}${entry.text}`;
+
+  if (viewMode === "hex") return `${ts}${dispUart(entry.uart)}: ${bytesToHex(entry.bytes)}`;
+  if (viewMode === "both") return `${ts}${dispUart(entry.uart)}: ${entry.text}   |   ${bytesToHex(entry.bytes)}`;
+  if (viewMode === "utf8") return `${ts}${dispUart(entry.uart)}: ${bytesToUtf8(entry.bytes)}`;
+  return `${ts}${dispUart(entry.uart)}: ${entry.text}`;
+}
+
+function renderLineHTML(entry) {
+  const tsMode = document.getElementById("tsMode").value;
+  const viewMode = document.getElementById("viewMode").value;
+
+  const ts = (entry.kind === "mark") ? fmtTimestamp(tsMode) : (entry.ts ? (tsMode === "off" ? "" : entry.ts + " ") : "");
+  const tsHtml = escapeHtml(ts);
+
+  if (entry.kind === "mark") return `${tsHtml}---- MARK ----`;
+  if (entry.kind === "meta") return `${tsHtml}[meta] ${escapeHtml(entry.text)}`;
+  if (!entry.bytes) return `${tsHtml}${escapeHtml(entry.text)}`;
+
+  const st = state[entry.uart];
+  const useRules = st?.rulesEnabled && st?.rules?.length;
+  const { mask, labels } = useRules ? buildHighlightMask(entry.bytes, st.rules) : { mask: null, labels: [] };
+
+  const prefix = `${tsHtml}${escapeHtml(dispUart(entry.uart))}: `;
+  let body = "";
+  if (viewMode === "hex") body = renderBytesHexHTML(entry.bytes, mask);
+  else if (viewMode === "both") {
+    const a = renderBytesAsciiHTML(entry.bytes, mask);
+    const h = renderBytesHexHTML(entry.bytes, mask);
+    body = `${a}   |   ${h}`;
+  } else if (viewMode === "utf8") body = escapeHtml(bytesToUtf8(entry.bytes));
+  else body = renderBytesAsciiHTML(entry.bytes, mask);
+
+  const lbl = (st?.rulesShowLabel && labels && labels.length) ? `<span class="rulelabel">[${escapeHtml(labels.join(","))}]</span>` : "";
+  return prefix + body + lbl;
+}
+
+function rerenderPort(port) {
+  const { out, filter, showMeta } = getPaneEls(port);
+  const q = (filter.value || "").trim().toLowerCase();
+  const keepMeta = showMeta.checked;
+
+  const linesHtml = [];
+  for (const e of state[port].entries) {
+    if (e.kind === "meta" && !keepMeta) continue;
+    const plain = renderLinePlain(e);
+    if (q && !plain.toLowerCase().includes(q)) continue;
+    linesHtml.push(renderLineHTML(e));
+  }
+  out.innerHTML = linesHtml.join("\n");
+  if (document.getElementById("auto" + port).checked) out.scrollTop = out.scrollHeight;
+}
+
+function appendIfSimple(port, entry) {
+  const { out, filter, showMeta } = getPaneEls(port);
+  const q = (filter.value || "").trim();
+  if (q) return rerenderPort(port);
+  if (entry.kind === "meta" && !showMeta.checked) return;
+  // append
+  if (!out.innerHTML) out.innerHTML = renderLineHTML(entry);
+  else out.innerHTML += "\n" + renderLineHTML(entry);
+  if (document.getElementById("auto" + port).checked) out.scrollTop = out.scrollHeight;
+}
+
+function rerenderPortWrapper() { rerenderPort("A"); rerenderPort("B"); }
+
+
+function clearPort(port) {
+  state[port].entries = [];
+  state[port].lastRx = 0;
+  state[port].lastAny = 0;
+  state[port]._buf = [];
+  if (state[port]._idleTimer) { clearTimeout(state[port]._idleTimer); state[port]._idleTimer = null; }
+  const { out } = getPaneEls(port);
+  out.innerHTML = "";
+  updateKPI(port);
+}
+
+function addMark(port) {
+  const tsMode = document.getElementById("tsMode").value;
+  const entry = {
+    ts: (tsMode === "local") ? nowLocal() : nowISO(),
+    uart: port,
+    kind: "mark",
+    bytes: null,
+    hex: null,
+    text: "MARK",
+    len: 0,
+    rawJson: JSON.stringify({ type: "mark", uart: port, ts: Date.now() })
+  };
+  ringPush(port, entry);
+  appendIfSimple(port, entry);
+  updateKPI(port);
+}
+
+function setConnectedUI(isConnected) {
+  connected = isConnected;
+  document.getElementById("connect").disabled = isConnected;
+  document.getElementById("disconnect").disabled = !isConnected;
+
+  document.getElementById("pauseAll").disabled = !isConnected;
+  document.getElementById("resumeAll").disabled = !isConnected;
+
+  document.getElementById("baud").disabled = !isConnected;
+  document.getElementById("applyBaud").disabled = !isConnected;
+
+  if (!isConnected) {
+    setPaneState("A", "idle");
+    setPaneState("B", "idle");
+  }
+}
+
+function setPausedAll(paused) {
+  state.A.paused = paused;
+  state.B.paused = paused;
+  getPaneEls("A").pause.checked = paused;
+  getPaneEls("B").pause.checked = paused;
+}
+
+/* ----------------------------
+   Baud control (file:// safe)
+---------------------------- */
+async function tryFetchCurrentBaud() {
+  // best-effort only (may be blocked by browser or due to CORS)
+  try {
+    const base = getHttpBase();
+    const r = await fetch(`${base}/baud/current`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const t = (await r.text()).trim();
+    return t || null;
+  } catch {
+    return null;
+  }
+}
+
+async function applyBaud(baud) {
+  if (!ws || baudApplying) return;
+  baudApplying = true;
+
+  const btn = document.getElementById("applyBaud");
+  const sel = document.getElementById("baud");
+
+  btn.disabled = true;
+  sel.disabled = true;
+
+  const wasPaused = state.A.paused && state.B.paused;
+  setPausedAll(true);
+
+  setDot("warn");
+  setStatus(`applying baud ${baud} (ser2net restart)…`);
+  setPaneState("A", "reconnecting…");
+  setPaneState("B", "reconnecting…");
+
+  try {
+    const base = getHttpBase();
+
+    await httpPing(`${base}/baud?value=${encodeURIComponent(baud)}`);
+
+    // We do NOT kill the WebSocket; we simply wait for data/meta to resume.
+    await new Promise(r => setTimeout(r, 1200));
+
+    const cur = await tryFetchCurrentBaud();
+    if (cur) lastKnownBaud = cur;
+    else lastKnownBaud = String(baud);
+
+    setStatus(`connected (baud ${lastKnownBaud})`);
+    setDot("on");
+  } catch (e) {
+    setStatus("baud apply failed (HTTP 8766 not reachable?)");
+    setDot("bad");
+  } finally {
+    setPausedAll(wasPaused);
+    btn.disabled = false;
+    sel.disabled = false;
+    baudApplying = false;
+  }
+}
+
+/* ----------------------------
+   WebSocket
+---------------------------- */
+function disconnectWS() {
+  userDisconnected = true;
+  clearReconnectTimer();
+  flushBuffered("A", true);
+  flushBuffered("B", true);
+  if (ws) {
+    try { ws.close(); } catch (_) {}
+    ws = null;
+  }
+  setConnectedUI(false);
+  setDot("bad");
+  setStatus("disconnected");
+}
+
+function connectWS() {
+  const url = getWsUrl();
+
+  setStatus("connecting…");
+  setDot("warn");
+  setConnectedUI(false);
+
+  ws = new WebSocket(url);
+
+  ws.onopen = async () => {
+    userDisconnected = false;
+    reconnectBackoffMs = 500;
+    clearReconnectTimer();
+    setDot("on");
+    setConnectedUI(true);
+    setStatus("connected (baud unknown)");
+
+    const b = await tryFetchCurrentBaud();
+    if (b) {
+      lastKnownBaud = b;
+      const sel = document.getElementById("baud");
+      const opt = Array.from(sel.options).find(o => o.value === b);
+      if (opt) sel.value = b;
+      setStatus(`connected (baud ${b})`);
+    }
+  };
+
+  ws.onclose = () => {
+    ws = null;
+    setConnectedUI(false);
+    setDot("bad");
+    setStatus("closed");
+  };
+
+  ws.onerror = () => {
+    setDot("bad");
+    setStatus("error");
+  };
+
+  ws.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); }
+    catch { return; }
+
+    // Server meta frames
+    if (msg.type === "meta") {
+      // We store as meta to both panes (optional visibility per pane).
+      const tsMode = document.getElementById("tsMode").value;
+      const ts = (tsMode === "local") ? nowLocal() : nowISO();
+
+      if (msg.baud != null) {
+        const b = String(msg.baud);
+        lastKnownBaud = b;
+        const sel = document.getElementById("baud");
+        const opt = Array.from(sel.options).find(o => o.value === b);
+        if (opt) sel.value = b;
+        setStatus(`connected (baud ${b})`);
+      }
+
+      const text = Object.entries(msg).map(([k,v]) => `${k}=${v}`).join(" ");
+      for (const port of ["A","B"]) {
+        const entry = { ts, uart: port, kind:"meta", bytes:null, hex:null, text, len:0, rawJson: ev.data };
+        ringPush(port, entry);
+        state[port].lastAny = Date.now();
+        if (!state[port].paused) appendIfSimple(port, entry);
+        updateKPI(port);
+      }
+      return;
+    }
+
+    if (!msg.uart || !msg.data) return;
+    const port = (msg.uart === "A") ? "A" : (msg.uart === "B") ? "B" : null;
+    if (!port) return;
+
+    // Data frame
+    const bytes = hexToBytes(msg.data);
+
+    state[port].lastRx = Date.now();
+    state[port].lastAny = state[port].lastRx;
+
+    ingestBytes(port, bytes);
+
+    setPaneState(port, "ok");
+    updateKPI(port);
+  };
+
+  ws.onerror = () => {
+    // Errors are often followed by close; keep it simple.
+    setDot("bad");
+    setStatus("error");
+  };
+
+  ws.onclose = () => {
+    ws = null;
+    setConnectedUI(false);
+    setDot("bad");
+    setStatus("disconnected");
+    scheduleReconnect("closed");
+  };
+}
+
+
+/* ----------------------------
+   No-data watchdog
+---------------------------- */
+function refreshNoData() {
+  const nodata = parseInt(document.getElementById("nodataMs").value, 10);
+  const thr = Number.isFinite(nodata) ? nodata : 1500;
+
+  const now = Date.now();
+  for (const port of ["A","B"]) {
+    if (!connected) {
+      setPaneState(port, "idle");
+      continue;
+    }
+    if (baudApplying) {
+      setPaneState(port, "reconnecting…");
+      continue;
+    }
+    const age = state[port].lastRx ? (now - state[port].lastRx) : Infinity;
+    if (age > thr) {
+      setPaneState(port, "no data");
+    }
+  }
+}
+setInterval(refreshNoData, 250);
+
+
+/* ----------------------------
+   Rules modal
+---------------------------- */
+let rulesPort = "A";
+
+function openRulesModal(port) {
+  rulesPort = port;
+  document.getElementById("rulesWhich").textContent = `for UART ${dispUart(port)}`;
+  document.getElementById("rulesText").value = state[port].rulesText || "";
+  document.getElementById("rulesEnable").checked = state[port].rulesEnabled !== false;
+  document.getElementById("rulesShowLabel").checked = !!state[port].rulesShowLabel;
+  document.getElementById("rulesModal").style.display = "block";
+}
+
+function closeRulesModal() {
+  document.getElementById("rulesModal").style.display = "none";
+}
+
+function applyRulesModal() {
+  const text = document.getElementById("rulesText").value || "";
+  const enabled = document.getElementById("rulesEnable").checked;
+  const showLbl = document.getElementById("rulesShowLabel").checked;
+  state[rulesPort].rulesText = text;
+  state[rulesPort].rulesEnabled = enabled;
+  state[rulesPort].rulesShowLabel = showLbl;
+  state[rulesPort].rules = parseRulesText(text);
+  rerenderPort(rulesPort);
+  saveSettings();
+}
+
+/* ----------------------------
+   UI wiring
+---------------------------- */
+document.getElementById("connect").onclick = () => { userDisconnected = false; reconnectBackoffMs = 500; clearReconnectTimer(); connectWS(); };
+document.getElementById("labelASelect").onchange = (e) => setLabelA(e.target.value);
+document.getElementById("swapLabels").onclick = () => swapLabels();
+
+
+document.getElementById("remember").onchange = () => saveSettings();
+
+for (const port of ["A","B"]) {
+  document.getElementById("auto"+port).onchange = () => { saveSettings(); };
+  document.getElementById("pause"+port).onchange = () => { state[port].paused = document.getElementById("pause"+port).checked; saveSettings(); };
+  document.getElementById("showMeta"+port).onchange = () => { rerenderPort(port); saveSettings(); };
+  document.getElementById("filter"+port).oninput = () => rerenderPort(port);
+
+  document.getElementById("frameMode"+port).onchange = () => { syncPaneConfigFromUI(port); saveSettings(); };
+  document.getElementById("frameParam"+port).oninput = () => { syncPaneConfigFromUI(port); saveSettings(); };
+
+  document.getElementById("rulesBtn"+port).onclick = () => openRulesModal(port);
+}
+
+document.getElementById("rulesClose").onclick = () => closeRulesModal();
+document.getElementById("rulesApply").onclick = () => { applyRulesModal(); closeRulesModal(); };
+document.getElementById("rulesModal").onclick = (e) => { if (e.target && e.target.id === "rulesModal") closeRulesModal(); };
+
+document.getElementById("wsip").oninput = () => saveSettings();
+document.getElementById("baud").onchange = () => saveSettings();
+document.getElementById("tsMode").onchange = () => { rerenderPort("A"); rerenderPort("B"); saveSettings(); };
+document.getElementById("viewMode").onchange = () => { rerenderPort("A"); rerenderPort("B"); saveSettings(); };
+document.getElementById("maxEntries").oninput = () => saveSettings();
+document.getElementById("nodataMs").oninput = () => saveSettings();
+
+document.getElementById("disconnect").onclick = () => disconnectWS();
+
+document.getElementById("pauseAll").onclick = () => {
+  setPausedAll(true);
+  setStatus(lastKnownBaud ? `connected (paused, baud ${lastKnownBaud})` : "connected (paused)");
+};
+document.getElementById("resumeAll").onclick = () => {
+  setPausedAll(false);
+  setStatus(lastKnownBaud ? `connected (baud ${lastKnownBaud})` : "connected");
+};
+
+document.getElementById("clearAll").onclick = () => {
+  clearPort("A"); clearPort("B");
+};
+
+document.getElementById("markAll").onclick = () => {
+  addMark("A"); addMark("B");
+};
+
+document.getElementById("applyBaud").onclick = async () => {
+  const baud = document.getElementById("baud").value;
+  await applyBaud(baud);
+};
+
+// per-pane pause + filter + toggles
+for (const port of ["A","B"]) {
+  const els = getPaneEls(port);
+
+  els.pause.onchange = () => {
+    state[port].paused = els.pause.checked;
+    if (state[port].paused) {
+      setPaneState(port, "paused");
+    } else {
+      // re-render to rebuild line format (and to fill missed lines)
+      rerenderPort(port);
+    }
+  };
+
+  els.filter.oninput = () => rerenderPort(port);
+  els.showMeta.onchange = () => rerenderPort(port);
+  // view/ts changes affect formatting -> rerender both panes
+}
+document.getElementById("viewMode").onchange = () => { rerenderPort("A"); rerenderPort("B"); };
+document.getElementById("tsMode").onchange = () => { rerenderPort("A"); rerenderPort("B"); };
+document.getElementById("maxEntries").onchange = () => {
+  // shrink if needed, then rerender
+  for (const port of ["A","B"]) {
+    const max = getMaxEntries();
+    const arr = state[port].entries;
+    if (arr.length > max) arr.splice(0, arr.length - max);
+    rerenderPort(port);
+    updateKPI(port);
+  }
+};
+
+// exports
+function exportTXT(port) {
+  const name = `uart_${labelMap[port]}_${nowISO().replaceAll(":", "-")}.txt`;
+  const content = state[port].entries
+    .filter(e => e.kind !== "meta")
+    .map(e => `${e.ts} ${dispUart(e.uart)}: ${e.kind==="mark" ? "---- MARK ----" : e.text}`)
+    .join("\n") + "\n";
+  downloadFile(name, content, "text/plain");
+}
+function exportJSONL(port) {
+  const name = `uart_${labelMap[port]}_${nowISO().replaceAll(":", "-")}.jsonl`;
+  const content = state[port].entries.map(e => e.rawJson || JSON.stringify(e)).join("\n") + "\n";
+  downloadFile(name, content, "application/json");
+}
+function exportCSV(port) {
+  const name = `uart_${labelMap[port]}_${nowISO().replaceAll(":", "-")}.csv`;
+  const csv = makeCSV(state[port].entries.map(e => ({
+    ts: e.ts, uart: dispUart(e.uart), kind: e.kind, len: e.len,
+    text: (e.kind === "mark") ? "---- MARK ----" : e.text,
+    hex: e.hex || ""
+  })));
+  downloadFile(name, csv, "text/csv");
+}
+document.getElementById("a_txt").onclick = () => exportTXT("A");
+document.getElementById("a_jsonl").onclick = () => exportJSONL("A");
+document.getElementById("a_csv").onclick = () => exportCSV("A");
+
+document.getElementById("b_txt").onclick = () => exportTXT("B");
+document.getElementById("b_jsonl").onclick = () => exportJSONL("B");
+document.getElementById("b_csv").onclick = () => exportCSV("B");
+
+// Hotkeys
+document.addEventListener("keydown", (e) => {
+  // Don't hijack when typing in inputs
+  const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+  const typing = (tag === "input" || tag === "select" || tag === "textarea");
+
+  if (!typing && e.key === " ") {
+    e.preventDefault();
+    const paused = state.A.paused && state.B.paused;
+    if (paused) document.getElementById("resumeAll").click();
+    else document.getElementById("pauseAll").click();
+  }
+  if (!typing && (e.key === "m" || e.key === "M")) {
+    document.getElementById("markAll").click();
+  }
+  if ((e.ctrlKey || e.metaKey) && !typing && (e.key === "k" || e.key === "K")) {
+    e.preventDefault();
+    document.getElementById("clearAll").click();
+  }
+});
+
+// Initial UI
+setLabelA(document.getElementById("labelASelect").value);
+loadSettings();
+// ensure framing controls are consistent even without stored settings
+syncPaneConfigFromUI("A");
+syncPaneConfigFromUI("B");
+state.A.rules = parseRulesText(state.A.rulesText);
+state.B.rules = parseRulesText(state.B.rulesText);
+setConnectedUI(false);
+setDot("bad");
+setStatus("idle");
+rerenderPort("A");
+rerenderPort("B");
+updateKPI("A");
+updateKPI("B");
+</script>
+
+  <div style="margin-top:12px; text-align:center;" class="muted small">
+    UART Live Viewer v14 …by DeDaMrAz
+  </div>
+
+</body>
+</html>
